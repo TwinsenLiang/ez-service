@@ -4,14 +4,16 @@
 # 服务管理脚本通用范本
 # ============================================================
 #
-# 用法: ./service.sh [start|stop|restart|status|logs|test|help]
+# 用法: ./service.sh [install|start|stop|restart|status|logs|cleanup|test|help]
 #
 # 命令说明:
+#   install - 初始化项目（创建目录、安装依赖、编译等）
 #   start   - 后台启动服务
 #   stop    - 停止服务
 #   restart - 重启服务
 #   status  - 查看服务状态
 #   logs    - 查看实时日志
+#   cleanup - 清理僵尸进程和端口占用
 #   test    - 运行测试程序（helloworld.py）
 #   help    - 显示帮助信息
 
@@ -56,9 +58,10 @@ DEPS_FILE="requirements.txt"
 show_help() {
     echo "$SERVICE_NAME - 服务管理脚本"
     echo ""
-    echo "用法: $0 [start|stop|restart|status|logs|cleanup|test|help]"
+    echo "用法: $0 [install|start|stop|restart|status|logs|cleanup|test|help]"
     echo ""
     echo "命令说明:"
+    echo "  install - 初始化项目（创建目录、安装依赖、编译等）"
     echo "  start   - 后台启动服务"
     echo "  stop    - 停止服务"
     echo "  restart - 重启服务"
@@ -69,6 +72,7 @@ show_help() {
     echo "  help    - 显示帮助信息"
     echo ""
     echo "示例:"
+    echo "  $0 install  # 首次使用，初始化项目"
     echo "  $0 start    # 启动服务"
     echo "  $0 status   # 查看状态"
     echo "  $0 cleanup  # 清理僵尸进程"
@@ -512,6 +516,105 @@ cleanup_service() {
     fi
 }
 
+# 初始化安装
+install_service() {
+    echo "=========================================="
+    echo "$SERVICE_NAME - 初始化安装"
+    echo "=========================================="
+    echo ""
+
+    # 1. 创建必要的目录
+    echo "📁 创建必要的目录..."
+
+    # 从 LOG_FILE 提取目录路径
+    LOG_DIR=$(dirname "$LOG_FILE")
+    if [ ! -d "$LOG_DIR" ]; then
+        mkdir -p "$LOG_DIR"
+        echo "  ✓ 创建日志目录: $LOG_DIR"
+    else
+        echo "  ✓ 日志目录已存在: $LOG_DIR"
+    fi
+
+    # 创建其他常用目录（如果需要）
+    for dir in data tmp cache; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            echo "  ✓ 创建目录: $dir"
+        fi
+    done
+
+    echo ""
+
+    # 2. 检查和创建 Python 虚拟环境
+    if [ "$USE_VENV" = "true" ]; then
+        echo "🐍 检查 Python 环境..."
+        check_python
+
+        if [ ! -d "venv" ]; then
+            echo "  正在创建虚拟环境..."
+            python3 -m venv venv
+            if [ $? -eq 0 ]; then
+                echo "  ✓ 虚拟环境创建成功"
+            else
+                echo "  ✗ 虚拟环境创建失败"
+                exit 1
+            fi
+        else
+            echo "  ✓ 虚拟环境已存在"
+        fi
+        echo ""
+    fi
+
+    # 3. 安装依赖
+    if [ "$CHECK_DEPS" = "true" ] && [ -f "$DEPS_FILE" ]; then
+        echo "📦 安装项目依赖..."
+
+        if [ "$USE_VENV" = "true" ]; then
+            source venv/bin/activate
+        fi
+
+        # 根据依赖文件类型选择包管理器
+        if [ "$DEPS_FILE" = "requirements.txt" ]; then
+            pip install -r "$DEPS_FILE"
+            if [ $? -eq 0 ]; then
+                echo "  ✓ Python 依赖安装成功"
+            else
+                echo "  ✗ Python 依赖安装失败"
+                exit 1
+            fi
+        elif [ "$DEPS_FILE" = "package.json" ]; then
+            npm install
+            if [ $? -eq 0 ]; then
+                echo "  ✓ Node.js 依赖安装成功"
+            else
+                echo "  ✗ Node.js 依赖安装失败"
+                exit 1
+            fi
+        elif [ "$DEPS_FILE" = "go.mod" ]; then
+            go mod download
+            if [ $? -eq 0 ]; then
+                echo "  ✓ Go 依赖安装成功"
+            else
+                echo "  ✗ Go 依赖安装失败"
+                exit 1
+            fi
+        fi
+        echo ""
+    fi
+
+    # 4. 编译步骤（如果需要）
+    # 可以在这里添加项目特定的编译命令
+    # 例如: Go 项目编译、前端构建等
+
+    echo "=========================================="
+    echo "✓ 初始化完成！"
+    echo "=========================================="
+    echo ""
+    echo "下一步:"
+    echo "  $0 start    # 启动服务"
+    echo "  $0 status   # 查看状态"
+}
+
 # 运行测试
 run_test() {
     echo "=========================================="
@@ -555,6 +658,9 @@ run_test() {
 # 主程序
 main() {
     case "$1" in
+        install)
+            install_service
+            ;;
         start)
             start_service
             ;;
